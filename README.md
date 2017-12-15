@@ -104,5 +104,60 @@ that's just a guess.
 One last note here: regardless of the IDE used, every submitted project must
 still be compilable with cmake and make./
 
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
+## Implementation
+
+
+### The Model
+
+The model used is a Kinematic model. 
+Look at the picture from the Udacity SDC lectures:
+
+![equations](./equations.png)
+
+State parameters:
+
+- `x, y` : Car's position.
+- `psi` : Car's heading direction.
+- `v` : Car's velocity.
+- `cte` : Cross-track error.
+- `epsi` : Orientation error.
+
+Also we use few more variables.
+– `Lf` – distance between the car of mass and the front wheels.
+- `a` : Car's acceleration (throttle).
+- `delta` : Steering angle.
+
+The objective is to find the acceleration (`a`) and the steering angle(`delta`) 
+in the way it will minimize an objective function that is the combination of different factors:
+
+- Square sum of `cte` and `epsi`. It could be found [here](./src/MPC.cpp#L37).
+- Square sum of the difference actuators to penalize a lot of actuator's actions. 
+It could be found [here](./src/MPC.cpp#L44).
+- Square sum of the difference between two consecutive actuator values to penalize sharp changes. 
+It could be found [here](./src/MPC.cpp#L50).
+
+### N & dt
+
+The number of points(`N`) and the time interval(`dt`) define the prediction horizon. 
+After the series of experiments I finally decided to use `N`=10 and `dt` = 100 ms.
+
+[YouTube video N=10, dt=0.1](https://www.youtube.com/watch?v=CmOgniA3fEI)
+
+Result may be a little better with `N`=20 and `dt`=50 ms but it costs more calculations.
+
+[YouTube video N=20, dt=0.05](https://www.youtube.com/watch?v=LnaIUJakju8)
+ 
+
+### Polynomial Fitting and MPC Preprocessing
+
+Waypoints provided by the simulator are transformed to the car coordinate system 
+using function `global2car` [./src/main.cpp](./src/main.cpp#L42). 
+Then a 3rd-degree polynomial is fitted to the transformed waypoints. 
+These polynomial coefficients are used to calculate the `cte` and `epsi` later on. 
+They are used by the solver as well to create a reference trajectory.
+
+### MPC with Latency
+
+To handle actuator latency, the state values are calculated using the motion model and the delay interval. 
+These values are used instead of the initial one. 
+The code implementing that could be found at [./src/main.cpp](./src/main.cpp#L24).

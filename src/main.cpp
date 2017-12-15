@@ -12,6 +12,47 @@
 // for convenience
 using json = nlohmann::json;
 
+struct State {
+  double x;
+  double y;
+  double psi;
+  double v;
+  double cte;
+  double epsi;
+};
+
+State addDelay(State state, double velocity, double delta, double throttle, int delayMs) {
+  const double delay = delayMs / 1000.0;
+  State newState;
+  newState.x = state.x + ( velocity * cos(state.psi) * delay );
+  newState.y = state.y + ( velocity * sin(state.psi) * delay );
+  newState.psi = state.psi - ( velocity * delta * delay / Lf );
+  newState.v = velocity + throttle * delay;
+  newState.cte = state.cte + ( velocity * sin(state.epsi) * delay );
+  newState.epsi = state.epsi + ( velocity * state.epsi * delay / Lf );
+  return newState;
+}
+
+Eigen::VectorXd state2vec(State state) {
+  Eigen::VectorXd vec(6);
+  vec << state.x, state.y, state.psi, state.v, state.cte, state.epsi;
+  return vec;
+}
+
+Eigen::MatrixXd global2car(double x, double y, double psi, const vector<double> & ptsx, const vector<double> & ptsy) {
+  assert(ptsx.size() == ptsy.size());
+  int x_size = ptsx.size();
+  auto transformed = Eigen::MatrixXd(2, x_size);
+  for (unsigned int i = 0; i < x_size; i++ ) {
+    double dX = ptsx[i] - x;
+    double dY = ptsy[i] - y;
+    double minus_psi = 0.0 - psi;
+    transformed(0, i) = dX * cos(minus_psi) - dY * sin(minus_psi);
+    transformed(1, i) = dX * sin(minus_psi) + dY * cos(minus_psi);
+  }
+  return transformed;
+}
+
 // For converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
@@ -71,6 +112,7 @@ int main() {
   // MPC is initialized here!
   MPC mpc;
 
+  // Actuator delay in ms
   h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -91,28 +133,45 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          double delta = j[1]["steering_angle"];
+          double a = j[1]["throttle"];
 
-          /*
-          * TODO: Calculate steering angle and throttle using MPC.
-          *
-          * Both are in between [-1, 1].
-          *
-          */
-          double steer_value;
-          double throttle_value;
+          const int delayMs = 100;
 
-          json msgJson;
+          // Transforms global coordinates to the cars coordinates
+          auto pts_car = global2car(px, py, psi, ptsx, ptsy);
+
+          // Fit 3rd order polynomial to the points
+          auto coeffs = polyfit(pts_car.row(0), pts_car.row(1), 3);
+
+          auto state = State { .x = 0, .y = 0, .psi = 0, .cte = coeffs[0], .epsi = -atan(coeffs[1]) };
+          state = addDelay(state, v, delta, a, delayMs);
+
+          auto state_vec = state2vec(state);
+
+          // Find the MPC solution
+          auto vars = mpc.Solve(state_vec, coeffs);
+
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
           // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
+          double steer_value = - vars[0]/deg2rad(25);
+          double throttle_value = vars[1];
+
+          json msgJson;
+
           msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = throttle_value;
 
-          //Display the MPC predicted trajectory 
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
 
-          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
-          // the points in the simulator are connected by a Green line
+          for (int i = 0; i < vars.size(); i++) {
+            if ( i % 2 == 0 ) {
+              mpc_x_vals.push_back(vars[i]);
+            } else {
+              mpc_y_vals.push_back(vars[i]);
+            }
+          }
 
           msgJson["mpc_x"] = mpc_x_vals;
           msgJson["mpc_y"] = mpc_y_vals;
@@ -121,12 +180,18 @@ int main() {
           vector<double> next_x_vals;
           vector<double> next_y_vals;
 
-          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
-          // the points in the simulator are connected by a Yellow line
+//          for (double i=0 ; i < pts_car.row(0).size(); ++i) {
+//            next_x_vals.push_back(pts_car.row(0)(i));
+//            next_y_vals.push_back(pts_car.row(1)(i));
+//          }
+
+          for (double i = 0; i < 100; i+= 2) {
+            next_x_vals.push_back(i);
+            next_y_vals.push_back(polyeval(coeffs, i));
+          }
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
-
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           std::cout << msg << std::endl;
@@ -139,7 +204,7 @@ int main() {
           //
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          this_thread::sleep_for(chrono::milliseconds(100));
+          this_thread::sleep_for(chrono::milliseconds(delayMs));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
