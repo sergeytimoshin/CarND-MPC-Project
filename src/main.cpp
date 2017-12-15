@@ -144,7 +144,13 @@ int main() {
           // Fit 3rd order polynomial to the points
           auto coeffs = polyfit(pts_car.row(0), pts_car.row(1), 3);
 
-          auto state = State { .x = 0, .y = 0, .psi = 0, .cte = coeffs[0], .epsi = -atan(coeffs[1]) };
+          State state;
+          state.x = 0;
+          state.y = 0;
+          state.psi = 0;
+          state.cte = coeffs[0];
+          state.epsi = -atan(coeffs[1]);
+
           state = addDelay(state, v, delta, a, delayMs);
 
           auto state_vec = state2vec(state);
