@@ -141,7 +141,7 @@ It could be found [here](./src/MPC.cpp#L50).
 The number of points(`N`) and the time interval(`dt`) define the prediction horizon. 
 After the series of experiments I finally decided to use `N`=10 and `dt` = 100 ms.
 
-[YouTube video N=10, dt=0.1](https://www.youtube.com/watch?v=CmOgniA3fEI)
+[YouTube video N=10, dt=0.1](https://youtu.be/WniGGPFk-Sc)
 
 Result may be a little better with `N`=20 and `dt`=50 ms but it costs more calculations.
 

@@ -29,7 +29,7 @@ State addDelay(State state, double velocity, double delta, double throttle, int 
   newState.psi = state.psi - ( velocity * delta * delay / Lf );
   newState.v = velocity + throttle * delay;
   newState.cte = state.cte + ( velocity * sin(state.epsi) * delay );
-  newState.epsi = state.epsi + ( velocity * state.epsi * delay / Lf );
+  newState.epsi = state.epsi + ( velocity * delta * delay / Lf );
   return newState;
 }
 
@@ -133,6 +133,7 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          v = v * 0.44704; // mph to m/s
           double delta = j[1]["steering_angle"];
           double a = j[1]["throttle"];
 
